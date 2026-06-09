@@ -110,3 +110,33 @@ async def client(test_db) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def generate_token():
+    import jwt
+    from src.config import settings
+    
+    def _generate(role: str, sub: str = None):
+        if not sub:
+            sub = "00000000-0000-0000-0000-000000000000"
+        payload = {
+            "sub": sub,
+            "role": role,
+            "email": f"{role.lower()}@example.com"
+        }
+        return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return _generate
+
+
+@pytest.fixture
+def admin_headers(generate_token):
+    token = generate_token(role="ADMIN")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def moderator_headers(generate_token):
+    token = generate_token(role="MODERATOR")
+    return {"Authorization": f"Bearer {token}"}
+

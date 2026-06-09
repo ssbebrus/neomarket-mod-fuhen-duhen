@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Response, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.database import get_db
+from src.core.security import get_current_user, RoleChecker
 from src.core.exceptions import BlockingReasonAlreadyExists, BlockingReasonNotFound
 from src.modules.blocking_reasons.service import BlockingReasonService
 from src.modules.blocking_reasons.schemas import (
@@ -14,7 +15,7 @@ from src.modules.blocking_reasons.schemas import (
 
 router = APIRouter()
 
-@router.get("", response_model=List[BlockingReasonResponse])
+@router.get("", response_model=List[BlockingReasonResponse], dependencies=[Depends(get_current_user)])
 async def list_blocking_reasons(
     hard_block: Optional[bool] = None,
     is_active: bool = True,
@@ -22,7 +23,7 @@ async def list_blocking_reasons(
 ):
     return await BlockingReasonService.list_reasons(db, hard_block=hard_block, is_active=is_active)
 
-@router.post("", response_model=BlockingReasonResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=BlockingReasonResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(RoleChecker(["ADMIN"]))])
 async def create_blocking_reason(
     payload: BlockingReasonCreateRequest,
     db: AsyncSession = Depends(get_db),
@@ -38,7 +39,7 @@ async def create_blocking_reason(
             },
         )
 
-@router.patch("/{reason_id}", response_model=BlockingReasonResponse)
+@router.patch("/{reason_id}", response_model=BlockingReasonResponse, dependencies=[Depends(RoleChecker(["ADMIN"]))])
 async def update_blocking_reason(
     reason_id: uuid.UUID,
     payload: BlockingReasonUpdateRequest,
@@ -55,7 +56,7 @@ async def update_blocking_reason(
             },
         )
 
-@router.delete("/{reason_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{reason_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(RoleChecker(["ADMIN"]))])
 async def delete_blocking_reason(
     reason_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
@@ -71,4 +72,5 @@ async def delete_blocking_reason(
                 "message": f"Blocking reason with ID '{reason_id}' not found",
             },
         )
+
 
