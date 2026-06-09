@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import delete
 
-from src.modules.blocking_reasons.models import BlockingReason, Ticket
+from src.modules.blocking_reasons.models import BlockingReason
+from src.modules.tickets.models import Ticket
 
 @pytest.mark.asyncio
 async def test_list_returns_active_reasons(client: AsyncClient, moderator_headers: dict):

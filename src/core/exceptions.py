@@ -29,3 +29,8 @@ class InvalidServiceKey(Exception):
     pass
 
 
+class ModeratorAlreadyHasActiveTicket(Exception):
+    pass
+
+
+
