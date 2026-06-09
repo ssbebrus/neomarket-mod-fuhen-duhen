@@ -33,7 +33,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_blocking_reasons_code'), 'blocking_reasons', ['code'], unique=True)
     
     # Засеиваем канонические причины блокировки
-    from src.db.models import SEED_REASONS
+    from src.modules.blocking_reasons.models import SEED_REASONS
     import uuid
     seed_data = [
         {
