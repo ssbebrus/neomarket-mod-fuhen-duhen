@@ -12,3 +12,20 @@ class BlockingReasonAlreadyExists(Exception):
 class BlockingReasonNotFound(Exception):
     pass
 
+
+class DuplicateCreatedEvent(Exception):
+    pass
+
+
+class TicketNotFound(Exception):
+    pass
+
+
+class B2BIntegrationError(Exception):
+    pass
+
+
+class InvalidServiceKey(Exception):
+    pass
+
+
