@@ -33,4 +33,19 @@ class ModeratorAlreadyHasActiveTicket(Exception):
     pass
 
 
+class TicketWrongStatus(Exception):
+    def __init__(self, message: str = "Wrong ticket status"):
+        self.message = message
+        super().__init__(message)
+
+
+class NotAssignedModerator(Exception):
+    pass
+
+
+class ProductHasNoSKUs(Exception):
+    pass
+
+
+
 
