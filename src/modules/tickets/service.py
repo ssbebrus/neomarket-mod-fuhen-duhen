@@ -1,10 +1,20 @@
 import uuid
+import httpx
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy import select, or_, and_
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import ModeratorAlreadyHasActiveTicket
+from src.config import settings
+from src.core.exceptions import (
+    ModeratorAlreadyHasActiveTicket,
+    TicketWrongStatus,
+    NotAssignedModerator,
+    ProductHasNoSKUs,
+    TicketNotFound,
+    B2BIntegrationError,
+)
 from src.modules.tickets.models import Ticket
 from src.modules.tickets.schemas import TicketClaimRequest
 
@@ -62,6 +72,77 @@ class TicketService:
         ticket.assigned_moderator_id = moderator_id
         ticket.claimed_at = now
         ticket.claim_expires_at = now + timedelta(minutes=30)
+
+        await db.commit()
+        await db.refresh(ticket)
+        return ticket
+
+    @staticmethod
+    async def approve_ticket(
+        db: AsyncSession,
+        ticket_id: uuid.UUID,
+        moderator_id: uuid.UUID,
+        comment: Optional[str] = None
+    ) -> Ticket:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        # 1. Находим тикет по ticket_id с блокировкой строки
+        stmt = select(Ticket).options(selectinload(Ticket.blocking_reasons)).where(Ticket.id == ticket_id).with_for_update()
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
+
+        if ticket is None:
+            raise TicketNotFound()
+
+        # 2. Проверяем предусловия
+        if ticket.status == "HARD_BLOCKED":
+            raise TicketWrongStatus("Product is permanently blocked")
+        if ticket.status != "IN_REVIEW":
+            raise TicketWrongStatus("Product is not in review")
+        if ticket.assigned_moderator_id != moderator_id:
+            raise NotAssignedModerator()
+        if ticket.claim_expires_at is not None and ticket.claim_expires_at < now:
+            raise TicketWrongStatus("Claim has expired")
+
+        # 3. Проверяем товар в B2B (GET /api/v1/products/{product_id})
+        url_get = f"{settings.B2B_URL}/api/v1/products/{ticket.product_id}"
+        headers = {"X-Service-Key": settings.B2B_TO_MODERATION_KEY}
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url_get, headers=headers, timeout=5.0)
+                response.raise_for_status()
+                product_data = response.json()
+            except Exception as e:
+                raise B2BIntegrationError(f"Failed to fetch product from B2B for validation: {str(e)}")
+
+        skus = product_data.get("skus", [])
+        if not skus:
+            raise ProductHasNoSKUs()
+
+        # 4. Отправляем событие MODERATED в B2B (POST /api/v1/moderation/events)
+        url_post = f"{settings.B2B_URL}/api/v1/moderation/events"
+        event_body = {
+            "idempotency_key": str(uuid.uuid4()),
+            "product_id": str(ticket.product_id),
+            "event_type": "MODERATED",
+            "moderator_id": str(moderator_id),
+            "moderator_comment": comment,
+            "occurred_at": now.isoformat() + "Z"
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(url_post, headers=headers, json=event_body, timeout=5.0)
+                response.raise_for_status()
+            except Exception as e:
+                raise B2BIntegrationError(f"Failed to notify B2B of product moderation status: {str(e)}")
+
+        # 5. Обновляем статус в БД и сохраняем решение
+        ticket.status = "APPROVED"
+        ticket.decision_at = now
+        ticket.decision_comment = comment
+        ticket.blocking_reasons = []
 
         await db.commit()
         await db.refresh(ticket)

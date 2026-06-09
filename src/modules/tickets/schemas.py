@@ -9,6 +9,11 @@ class TicketClaimRequest(BaseModel):
     category_ids: Optional[List[uuid.UUID]] = Field(default=None)
 
 
+class TicketApproveRequest(BaseModel):
+    comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+
 class TicketResponse(BaseModel):
     id: uuid.UUID
     product_id: uuid.UUID
