@@ -5,7 +5,7 @@ import httpx
 from sqlalchemy import select
 
 from src.config import settings
-from src.modules.blocking_reasons.models import Ticket
+from src.modules.tickets.models import Ticket
 from src.modules.b2b_events.models import EventIdempotencyKey
 
 
