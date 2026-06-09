@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +16,7 @@ class TicketService:
         moderator_id: uuid.UUID,
         payload: Optional[TicketClaimRequest] = None
     ) -> Optional[Ticket]:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # 1. Проверяем, нет ли у модератора уже взятого активного тикета
         active_stmt = select(Ticket).where(

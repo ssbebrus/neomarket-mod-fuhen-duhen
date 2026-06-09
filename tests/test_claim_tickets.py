@@ -1,6 +1,6 @@
 import uuid
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -28,7 +28,7 @@ async def test_claim_next_happy_path(client, test_db, moderator_headers):
         kind="CREATE",
         status="PENDING",
         queue_priority=2,
-        created_at=datetime.utcnow() - timedelta(hours=1)
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
     )
     # Тикет B: приоритет 1 (высший), создан позже
     ticket_b = Ticket(
@@ -38,7 +38,7 @@ async def test_claim_next_happy_path(client, test_db, moderator_headers):
         kind="CREATE",
         status="PENDING",
         queue_priority=1,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None)
     )
     test_db.add(ticket_a)
     test_db.add(ticket_b)
@@ -84,7 +84,7 @@ async def test_moderator_has_active_returns_409(client, test_db, moderator_heade
         status="IN_REVIEW",
         queue_priority=3,
         assigned_moderator_id=mod_id,
-        claim_expires_at=datetime.utcnow() + timedelta(minutes=20)
+        claim_expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=20)
     )
     test_db.add(active_ticket)
     await test_db.commit()
@@ -105,7 +105,7 @@ async def test_claim_expired_ticket(client, test_db, moderator_headers):
         status="IN_REVIEW",
         queue_priority=3,
         assigned_moderator_id=uuid.uuid4(),
-        claim_expires_at=datetime.utcnow() - timedelta(minutes=5)  # истек 5 минут назад
+        claim_expires_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)  # истек 5 минут назад
     )
     test_db.add(expired_ticket)
     await test_db.commit()
@@ -131,19 +131,19 @@ async def test_claim_with_priority_and_category_filters(client, test_db, moderat
     ticket_a = Ticket(
         id=uuid.uuid4(), product_id=uuid.uuid4(), seller_id=uuid.uuid4(),
         category_id=cat1, kind="CREATE", status="PENDING", queue_priority=1,
-        created_at=datetime.utcnow() - timedelta(minutes=10)
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=10)
     )
     # Ticket B: priority 2, category cat2
     ticket_b = Ticket(
         id=uuid.uuid4(), product_id=uuid.uuid4(), seller_id=uuid.uuid4(),
         category_id=cat2, kind="CREATE", status="PENDING", queue_priority=2,
-        created_at=datetime.utcnow() - timedelta(minutes=5)
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
     )
     # Ticket C: priority 1, category cat2
     ticket_c = Ticket(
         id=uuid.uuid4(), product_id=uuid.uuid4(), seller_id=uuid.uuid4(),
         category_id=cat2, kind="CREATE", status="PENDING", queue_priority=1,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None)
     )
     test_db.add_all([ticket_a, ticket_b, ticket_c])
     await test_db.commit()
@@ -207,7 +207,7 @@ async def test_concurrent_claims_different_cards(test_engine):
                 kind="CREATE",
                 status="PENDING",
                 queue_priority=1,
-                created_at=datetime.utcnow() - timedelta(minutes=10)
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=10)
             )
         )
         await conn.execute(
@@ -218,7 +218,7 @@ async def test_concurrent_claims_different_cards(test_engine):
                 kind="CREATE",
                 status="PENDING",
                 queue_priority=1,
-                created_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None)
             )
         )
 
