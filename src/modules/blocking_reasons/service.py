@@ -2,8 +2,8 @@ import uuid
 from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException, status
 
+from src.core.exceptions import BlockingReasonAlreadyExists, BlockingReasonNotFound
 from src.modules.blocking_reasons.models import BlockingReason
 from src.modules.blocking_reasons.schemas import (
     BlockingReasonCreateRequest,
@@ -35,13 +35,7 @@ class BlockingReasonService:
             select(BlockingReason).where(BlockingReason.code == payload.code)
         )
         if existing.scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "BLOCKING_REASON_ALREADY_EXISTS",
-                    "message": f"Blocking reason with code '{payload.code}' already exists",
-                },
-            )
+            raise BlockingReasonAlreadyExists()
 
         reason = BlockingReason(
             code=payload.code,
@@ -63,13 +57,7 @@ class BlockingReasonService:
     ) -> BlockingReason:
         reason = await db.get(BlockingReason, reason_id)
         if not reason:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "code": "BLOCKING_REASON_NOT_FOUND",
-                    "message": f"Blocking reason with ID '{reason_id}' not found",
-                },
-            )
+            raise BlockingReasonNotFound()
 
         if payload.title is not None:
             reason.title = payload.title
@@ -89,14 +77,9 @@ class BlockingReasonService:
     ) -> None:
         reason = await db.get(BlockingReason, reason_id)
         if not reason:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "code": "BLOCKING_REASON_NOT_FOUND",
-                    "message": f"Blocking reason with ID '{reason_id}' not found",
-                },
-            )
+            raise BlockingReasonNotFound()
 
         # Мягкое удаление (деактивация)
         reason.is_active = False
         await db.commit()
+
