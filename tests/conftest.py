@@ -19,10 +19,32 @@ def event_loop():
 @pytest.fixture(scope="session")
 async def test_engine():
     from src.db.base import Base
+    from src.modules.blocking_reasons.models import BlockingReason, SEED_REASONS
+    from sqlalchemy import select
+    import uuid
     async with real_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Засеиваем начальные данные для тестов, если они отсутствуют
+        for reason in SEED_REASONS:
+            reason_id = uuid.UUID(reason["id"])
+            existing = await conn.execute(
+                select(BlockingReason.id).where(BlockingReason.id == reason_id)
+            )
+            if existing.scalar() is None:
+                await conn.execute(
+                    BlockingReason.__table__.insert().values(
+                        id=reason_id,
+                        code=reason["code"],
+                        title=reason["title"],
+                        hard_block=reason["hard_block"],
+                        is_active=True
+                    )
+                )
     yield real_engine
     await real_engine.dispose()
+
+
 
 @pytest.fixture
 async def test_db(test_engine) -> AsyncGenerator[AsyncSession, None]:
@@ -88,3 +110,33 @@ async def client(test_db) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def generate_token():
+    import jwt
+    from src.config import settings
+    
+    def _generate(role: str, sub: str = None):
+        if not sub:
+            sub = "00000000-0000-0000-0000-000000000000"
+        payload = {
+            "sub": sub,
+            "role": role,
+            "email": f"{role.lower()}@example.com"
+        }
+        return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return _generate
+
+
+@pytest.fixture
+def admin_headers(generate_token):
+    token = generate_token(role="ADMIN")
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def moderator_headers(generate_token):
+    token = generate_token(role="MODERATOR")
+    return {"Authorization": f"Bearer {token}"}
+
