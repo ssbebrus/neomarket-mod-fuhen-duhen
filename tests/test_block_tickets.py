@@ -210,7 +210,10 @@ async def test_soft_block_invalid_field_name_returns_400(client, test_db, modera
 
 
 @pytest.mark.asyncio
-async def test_soft_block_hard_only_reason_returns_400(client, test_db, moderator_headers, monkeypatch):
+async def test_block_with_hard_reason_transitions_to_hard_blocked(
+    client, test_db, moderator_headers, monkeypatch
+):
+    """Hard-причина в /block переводит тикет в HARD_BLOCKED, а не возвращает 400."""
     ticket = await seed_in_review_ticket(test_db)
     install_b2b_mock(monkeypatch)
 
@@ -220,5 +223,5 @@ async def test_soft_block_hard_only_reason_returns_400(client, test_db, moderato
         json=make_block_payload(reason_ids=[HARD_REASON_ID]),
     )
 
-    assert response.status_code == 400
-    assert response.json()["code"] == "BLOCKING_REASON_HARD_ONLY"
+    assert response.status_code == 200
+    assert response.json()["status"] == "HARD_BLOCKED"

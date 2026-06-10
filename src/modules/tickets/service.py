@@ -15,7 +15,6 @@ from src.core.exceptions import (
     TicketNotFound,
     B2BIntegrationError,
     BlockingReasonNotFound,
-    HardBlockReasonNotAllowed,
 )
 from src.modules.blocking_reasons.models import BlockingReason
 from src.modules.tickets.field_path import validate_field_reports
@@ -196,9 +195,8 @@ class TicketService:
         if len(reasons) != len(payload.blocking_reason_ids):
             raise BlockingReasonNotFound()
 
-        for reason in reasons:
-            if reason.hard_block:
-                raise HardBlockReasonNotAllowed()
+        # Определяем тип блокировки по флагу причины
+        is_hard_block = any(reason.hard_block for reason in reasons)
 
         parsed_reports = validate_field_reports(payload.field_reports)
 
@@ -219,7 +217,7 @@ class TicketService:
             "product_id": str(ticket.product_id),
             "event_type": "BLOCKED",
             "moderator_id": str(moderator_id),
-            "hard_block": False,
+            "hard_block": is_hard_block,
             "blocking_reason_id": str(primary_reason.id),
             "moderator_comment": payload.comment,
             "field_reports": b2b_field_reports,
@@ -237,7 +235,7 @@ class TicketService:
                     f"Failed to notify B2B of product block status: {str(e)}"
                 )
 
-        ticket.status = "BLOCKED"
+        ticket.status = "HARD_BLOCKED" if is_hard_block else "BLOCKED"
         ticket.decision_at = now
         ticket.decision_comment = payload.comment
         ticket.blocking_reasons = reasons
