@@ -13,7 +13,6 @@ from src.core.exceptions import (
     ProductHasNoSKUs,
     B2BIntegrationError,
     BlockingReasonNotFound,
-    HardBlockReasonNotAllowed,
     InvalidFieldReport,
 )
 from src.modules.tickets.schemas import (
@@ -143,14 +142,6 @@ async def block_moderation_ticket(
             detail={
                 "code": "BLOCKING_REASON_NOT_FOUND",
                 "message": "Blocking reason not found"
-            }
-        )
-    except HardBlockReasonNotAllowed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "BLOCKING_REASON_HARD_ONLY",
-                "message": "Blocking reason requires hard block"
             }
         )
     except InvalidFieldReport as e:
