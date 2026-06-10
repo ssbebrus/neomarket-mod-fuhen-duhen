@@ -7,6 +7,7 @@ from src.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from src.modules.blocking_reasons.models import BlockingReason
+    from src.modules.tickets.field_report_models import TicketFieldReport
 
 ticket_blocking_reasons = Table(
     "ticket_blocking_reasons",
@@ -36,4 +37,8 @@ class Ticket(Base, TimestampMixin):
     blocking_reasons: Mapped[List["BlockingReason"]] = relationship(
         secondary=ticket_blocking_reasons,
         back_populates="tickets"
+    )
+    field_reports: Mapped[List["TicketFieldReport"]] = relationship(
+        back_populates="ticket",
+        cascade="all, delete-orphan",
     )

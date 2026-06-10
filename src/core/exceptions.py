@@ -47,5 +47,15 @@ class ProductHasNoSKUs(Exception):
     pass
 
 
+class InvalidFieldReport(Exception):
+    def __init__(self, message: str = "Invalid field report"):
+        self.message = message
+        super().__init__(message)
+
+
+class HardBlockReasonNotAllowed(Exception):
+    pass
+
+
 
 
