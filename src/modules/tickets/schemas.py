@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Literal, Optional, List
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -12,6 +12,17 @@ class TicketClaimRequest(BaseModel):
 class TicketApproveRequest(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=2000)
 
+
+class FieldReportInput(BaseModel):
+    field_path: str = Field(..., max_length=256)
+    message: str = Field(..., max_length=1000)
+    severity: Literal["INFO", "WARNING", "ERROR"] = "ERROR"
+
+
+class TicketBlockRequest(BaseModel):
+    blocking_reason_ids: List[uuid.UUID] = Field(..., min_length=1)
+    comment: Optional[str] = Field(default=None, max_length=2000)
+    field_reports: List[FieldReportInput] = Field(default_factory=list)
 
 
 class TicketResponse(BaseModel):

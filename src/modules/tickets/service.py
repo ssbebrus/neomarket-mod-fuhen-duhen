@@ -14,9 +14,14 @@ from src.core.exceptions import (
     ProductHasNoSKUs,
     TicketNotFound,
     B2BIntegrationError,
+    BlockingReasonNotFound,
+    HardBlockReasonNotAllowed,
 )
+from src.modules.blocking_reasons.models import BlockingReason
+from src.modules.tickets.field_path import validate_field_reports
+from src.modules.tickets.field_report_models import TicketFieldReport
 from src.modules.tickets.models import Ticket
-from src.modules.tickets.schemas import TicketClaimRequest
+from src.modules.tickets.schemas import TicketBlockRequest, TicketClaimRequest
 
 
 class TicketService:
@@ -143,6 +148,110 @@ class TicketService:
         ticket.decision_at = now
         ticket.decision_comment = comment
         ticket.blocking_reasons = []
+
+        await db.commit()
+        await db.refresh(ticket)
+        return ticket
+
+    @staticmethod
+    async def block_ticket(
+        db: AsyncSession,
+        ticket_id: uuid.UUID,
+        moderator_id: uuid.UUID,
+        payload: TicketBlockRequest,
+    ) -> Ticket:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        stmt = (
+            select(Ticket)
+            .options(
+                selectinload(Ticket.blocking_reasons),
+                selectinload(Ticket.field_reports),
+            )
+            .where(Ticket.id == ticket_id)
+            .with_for_update()
+        )
+        result = await db.execute(stmt)
+        ticket = result.scalar_one_or_none()
+
+        if ticket is None:
+            raise TicketNotFound()
+
+        if ticket.status == "HARD_BLOCKED":
+            raise TicketWrongStatus("Product is permanently blocked")
+        if ticket.status != "IN_REVIEW":
+            raise TicketWrongStatus("Product is not in review")
+        if ticket.assigned_moderator_id != moderator_id:
+            raise NotAssignedModerator()
+        if ticket.claim_expires_at is not None and ticket.claim_expires_at < now:
+            raise TicketWrongStatus("Claim has expired")
+
+        reasons_stmt = select(BlockingReason).where(
+            BlockingReason.id.in_(payload.blocking_reason_ids),
+            BlockingReason.is_active.is_(True),
+        )
+        reasons_result = await db.execute(reasons_stmt)
+        reasons = list(reasons_result.scalars().all())
+
+        if len(reasons) != len(payload.blocking_reason_ids):
+            raise BlockingReasonNotFound()
+
+        for reason in reasons:
+            if reason.hard_block:
+                raise HardBlockReasonNotAllowed()
+
+        parsed_reports = validate_field_reports(payload.field_reports)
+
+        primary_reason = reasons[0]
+        b2b_field_reports = [
+            {
+                "field_name": report.field_name,
+                "sku_id": str(report.sku_id) if report.sku_id else None,
+                "comment": report.message,
+            }
+            for report in parsed_reports
+        ]
+
+        url_post = f"{settings.B2B_URL}/api/v1/moderation/events"
+        headers = {"X-Service-Key": settings.B2B_TO_MODERATION_KEY}
+        event_body = {
+            "idempotency_key": str(uuid.uuid4()),
+            "product_id": str(ticket.product_id),
+            "event_type": "BLOCKED",
+            "moderator_id": str(moderator_id),
+            "hard_block": False,
+            "blocking_reason_id": str(primary_reason.id),
+            "moderator_comment": payload.comment,
+            "field_reports": b2b_field_reports,
+            "occurred_at": now.isoformat() + "Z",
+        }
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    url_post, headers=headers, json=event_body, timeout=5.0
+                )
+                response.raise_for_status()
+            except Exception as e:
+                raise B2BIntegrationError(
+                    f"Failed to notify B2B of product block status: {str(e)}"
+                )
+
+        ticket.status = "BLOCKED"
+        ticket.decision_at = now
+        ticket.decision_comment = payload.comment
+        ticket.blocking_reasons = reasons
+
+        ticket.field_reports.clear()
+        for report in parsed_reports:
+            ticket.field_reports.append(
+                TicketFieldReport(
+                    field_path=report.field_path,
+                    message=report.message,
+                    severity=report.severity,
+                    sku_id=report.sku_id,
+                )
+            )
 
         await db.commit()
         await db.refresh(ticket)
